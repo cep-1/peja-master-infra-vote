@@ -18,10 +18,12 @@ pipeline {
                 script {
                     if (env.BRANCH_NAME == 'main') {
                         env.BUILD_TYPE = 'push'
+                    } else if (env.BUILD_CAUSE == 'github'){
+                        env.BUILD_TYPE = 'release'
+                        env.RELEASE_TAG = sh(script: "echo '\${GITHUB_REF##*/}'", returnStdout: true).trim()
                     } else {
                         env.BUILD_TYPE = 'test'
                     }
-                    env.COMMIT_TAG = sh(script: "git describe --tags --abbrev=0", returnStdout: true).trim()
                 }
             }
         }
@@ -42,17 +44,16 @@ pipeline {
                 sh 'sudo docker build -t peja-master-infra-vote .'
             }
         }
-        stage('Handle Push Event') {
+        stage('Handle Release Event') {
             when {
-                expression { env.BUILD_TYPE == 'push' }
+                expression { env.BUILD_TYPE == 'release' }
             }
             steps {
                 script {
-                    def commitTag = env.COMMIT_TAG
-                    sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:${commitTag}"
+                    def releaseTag = env.RELEASE_TAG
+                    sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:${releaseTag}"
                     sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:latest"
-                    sh "sudo docker push ${ECR_URL}:${commitTag}"
-                    sh "sudo docker push ${ECR_URL}:latest"
+                    sh "sudo docker push ${ECR_URL}:${releaseTag}"
                 }
             }
         }
