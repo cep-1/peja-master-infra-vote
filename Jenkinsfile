@@ -3,6 +3,9 @@ pipeline {
     environment {
         GITHUB_TOKEN = credentials('peja-master-infra-github-lm')
     }
+    tools {
+        dockerTool 'docker'
+    }
     triggers {
         githubPush()
     }
@@ -12,12 +15,17 @@ pipeline {
                 script {
                     def isReleaseEvent = false
                     try {
-                        def eventPayload = readJSON file: 'payload.json'
-                        if (eventPayload?.action == 'published' && eventPayload?.release) {
+                        def response = sh(script: """
+                            curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                            "https://api.github.com/repos/cep-1/peja-master-infra-vote/releases/latest" \
+                            """, returnStdout: true).trim()
+                        def json = new groovy.json.JsonSlurper().parseText(response)
+                        if (json?.tag_name) {
                             isReleaseEvent = true
+                            env.RELEASE_TAG = json.tag_name
                         }
                     } catch (Exception e) {
-                        echo "Error reading payload.json: ${e}"
+                        echo "Error fetching release information: ${e}"
                     }
                     env.IS_RELEASE_EVENT = isReleaseEvent.toString()
                 }
@@ -31,13 +39,13 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    sh 'aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin 211125460791.dkr.ecr.eu-central-1.amazonaws.com'
+                    sh 'aws ecr get-login-password --region eu-central-1 | sudo docker login --username AWS --password-stdin 211125460791.dkr.ecr.eu-central-1.amazonaws.com'
                 }
             }
         }
         stage('Docker Config and Build Image') {
             steps {
-                sh 'docker build -t peja-master-infra-vote .'
+                sh 'sudo docker build -t peja-master-infra-vote .'
             }
         }
         stage('Handle Release Event') {
@@ -58,10 +66,10 @@ pipeline {
                     '''
                     env.RELEASE_TAG = readFile('release_tag.txt').trim()
                 }
-                sh 'docker tag peja-master-infra-vote:${RELEASE_TAG} 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:${RELEASE_TAG}'
-                sh 'docker tag peja-master-infra-vote:latest 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:latest'
-                sh 'docker push 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:${RELEASE_TAG}'
-                sh 'docker push 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:latest'
+                sh 'sudo docker tag peja-master-infra-vote:${RELEASE_TAG} 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:${RELEASE_TAG}'
+                sh 'sudo docker tag peja-master-infra-vote:latest 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:latest'
+                sh 'sudo docker push 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:${RELEASE_TAG}'
+                sh 'sudo docker push 211125460791.dkr.ecr.eu-central-1.amazonaws.com/peja-vote-repo:latest'
             }
         }
     }
