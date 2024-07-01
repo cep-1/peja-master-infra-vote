@@ -9,24 +9,7 @@ pipeline {
     tools {
         dockerTool 'docker'
     }
-    triggers {
-        githubPush()
-    }
     stages {
-        stage('Determine Build Type') {
-            steps {
-                script {
-                    if (env.BRANCH_NAME == 'main') {
-                        env.BUILD_TYPE = 'push'
-                    } else if (env.BUILD_CAUSE == 'github'){
-                        env.BUILD_TYPE = 'release'
-                        env.RELEASE_TAG = sh(script: "echo '\${GITHUB_REF##*/}'", returnStdout: true).trim()
-                    } else {
-                        env.BUILD_TYPE = 'test'
-                    }
-                }
-            }
-        }
         stage('Connect to ECR') {
             steps {
                 withCredentials([[
@@ -44,16 +27,13 @@ pipeline {
                 sh 'sudo docker build -t peja-master-infra-vote .'
             }
         }
-        stage('Handle Release Event') {
-            when {
-                expression { env.BUILD_TYPE == 'release' }
-            }
+        stage('Push to ECR') {
             steps {
                 script {
-                    def releaseTag = env.RELEASE_TAG
-                    sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:${releaseTag}"
-                    sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:latest"
-                    sh "sudo docker push ${ECR_URL}:${releaseTag}"
+                    if (env.BRANCH_NAME == 'main') {
+                        sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:latest"
+                        sh "sudo docker push ${ECR_URL}:latest"
+                    }
                 }
             }
         }
