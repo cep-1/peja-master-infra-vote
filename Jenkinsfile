@@ -31,8 +31,11 @@ pipeline {
             steps {
                 script {
                     if (env.BRANCH_NAME == 'main') {
+                        def version = sh(script: "cat version.json | jq -r .version", returnStdout: true).trim()
                         sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:latest"
+                        sh "sudo docker tag peja-master-infra-vote ${ECR_URL}:${version}"
                         sh "sudo docker push ${ECR_URL}:latest"
+                        sh "sudo docker push ${ECR_URL}:${version}"
                     }
                 }
             }
